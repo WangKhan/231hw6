@@ -1,0 +1,2 @@
+(fun (fact n) (- n 1))
+(fact 3)

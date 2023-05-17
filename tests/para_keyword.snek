@@ -1,0 +1,2 @@
+(fun (key let) (print input))
+(key input)
