@@ -13,7 +13,7 @@ extern "C" {
 pub extern "C" fn snek_error(errcode: i64) {
     // TODO: print error message according to writeup
     if errcode == 99 {
-        eprintln!("invalid argument, boolean can't be used this way");
+        eprintln!("invalid argument, the type of argument is wrong");
     } else if errcode == 101 {
         eprintln!("overflow");
     } else {

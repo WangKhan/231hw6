@@ -402,6 +402,7 @@ fn compile_to_instrs(
                 instrs.push(Instr::Jo("overflow".to_string()));
             }
             Op2::Equal => {
+                let end_label = new_label(l, "ifend");
                 let mut new_instrs1 = compile_to_instrs(expr1, si, env, brake, l, func_map.clone());
                 let stack_offset = si * 8;
                 instrs.append(&mut new_instrs1);
@@ -419,6 +420,16 @@ fn compile_to_instrs(
                 ));
                 instrs.push(Instr::Test(Val::Reg(Reg::RBX), Val::Imm(1)));
                 instrs.push(Instr::Jne("invalid_argument".to_string()));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
+                instrs.push(Instr::Test(Val::Reg(Reg::RBX), Val::Imm(1)));
+                instrs.push(Instr::Jne(end_label.clone()));
+                instrs.push(Instr::Xor(
+                    Val::Reg(Reg::RBX),
+                    Val::RegOffset(Reg::RSP, stack_offset),
+                ));
+                instrs.push(Instr::Test(Val::Reg(Reg::RBX), Val::Imm(3)));
+                instrs.push(Instr::Jne("invalid_argument".to_string()));
+                instrs.push(Instr::Label(end_label.clone()));
                 instrs.push(Instr::Cmp(
                     Val::Reg(Reg::RAX),
                     Val::RegOffset(Reg::RSP, stack_offset),
