@@ -22,6 +22,7 @@ enum Reg {
     RSP,
     RDI,
     RBX,
+    R15,
 }
 
 const KEY_WORDS: [&'static str; 20] = [
@@ -49,6 +50,7 @@ enum Instr {
     Jo(String),
     Label(String),
     Xor(Val, Val),
+    And(Val, Val),
     Call(String),
     Ret,
 }
@@ -87,6 +89,8 @@ enum Expr {
     Loop(Box<Expr>),
     Break(Box<Expr>),
     Call(String, Vec<Expr>),
+    Tuple(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>)
 }
 #[derive(Debug)]
 enum Def {
@@ -126,6 +130,7 @@ fn main() -> std::io::Result<()> {
     // let expr = parse_expr(&content);
     // let mut labels = 0;
     // let result = compile(&expr, 2, &HashMap::new(), &String::from(""), &mut labels);
+    
 
     let asm_program = format!(
         "
@@ -134,6 +139,12 @@ fn main() -> std::io::Result<()> {
         extern snek_error
         extern snek_print
         error_handling_starts_here:
+        index_out_of_bound:
+          mov rdi, 102
+          jmp throw_error
+        not_tuple:
+          mov rdi, 100
+          jmp throw_error
         invalid_argument:
           mov rdi, 99
           jmp throw_error
@@ -153,8 +164,10 @@ fn main() -> std::io::Result<()> {
           ret
         {}
         our_code_starts_here:
-        {}
-        ret
+          mov r15,rsi
+          {}
+          ret
+
 ",
         defination, expr_result
     );
@@ -232,6 +245,13 @@ fn parse_expr(s: &Sexp) -> Expr {
             [Sexp::Atom(S(op)), exprs @ ..] if op == "block" => {
                 Expr::Block(exprs.into_iter().map(parse_expr).collect())
             }
+            [Sexp::Atom(S(op)), exprs @ ..] if op == "tuple" => {
+                Expr::Tuple(exprs.into_iter().map(parse_expr).collect())
+            }
+            [Sexp::Atom(S(op)), e1, e2] if op == "index" => Expr::Index(
+                Box::new(parse_expr(e1)),
+                Box::new(parse_expr(e2)),
+            ),
             [Sexp::Atom(S(op)), name, e] if op == "set!" => {
                 Expr::Set(name.to_string(), Box::new(parse_expr(e)))
             }
@@ -355,9 +375,10 @@ fn compile_to_instrs(
             Op1::IsBool => {
                 let mut new_instrs = compile_to_instrs(expr, si, env, brake, l, func_map);
                 instrs.append(&mut new_instrs);
-                instrs.push(Instr::Test(Val::Reg(Reg::RAX), Val::Imm(3)));
-                instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Bool(true)));
-                instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Bool(false)));
+                instrs.push(Instr::And(Val::Reg(Reg::RAX), Val::Imm(3)));
+                instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::Imm(3)));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Bool(false)));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Bool(true)));
                 instrs.push(Instr::CMove(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX)));
             }
         },
@@ -599,6 +620,66 @@ fn compile_to_instrs(
           instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(stack_offset + param_offset - 8 + align_offset)));
           instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, stack_offset )));
         }
+        Expr::Tuple(es) => {
+            if es.len() == 0 {
+                panic!("Invalid");
+            }
+            let i64_value: i64 = es.len().try_into().unwrap();
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::R15, 0),
+            Val::Imm(i64_value)));
+            let mut offset = 8;
+            for block in es {
+                instrs.append(&mut compile_to_instrs(
+                    block,
+                    si,
+                    env,
+                    brake,
+                    l,
+                    func_map.clone(),
+                ));
+                instrs.push(Instr::IMov(Val::RegOffset(Reg::R15, offset),
+                Val::Reg(Reg::RAX)));
+                offset += 8;
+            }
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R15)));
+            // tag the heap address with 01 ending
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm(offset)));
+        }
+        Expr::Index(pointer, index ) => {
+            instrs.append(&mut compile_to_instrs(
+                pointer,
+                si,
+                env,
+                brake,
+                l,
+                func_map.clone(),
+            ));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, si * 8), Val::Reg(Reg::RAX)));
+            instrs.push(Instr::And(Val::Reg(Reg::RAX), Val::Imm(3)));
+            instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::Jne("not_tuple".to_string()));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si * 8)));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 1) * 8), Val::Reg(Reg::RAX)));
+            instrs.append(&mut compile_to_instrs(
+                index,
+                si + 2,
+                env,
+                brake,
+                l,
+                func_map.clone(),
+            ));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 2) * 8), Val::Reg(Reg::RAX)));
+            instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si + 1) * 8)));
+            // index starts from 0
+            instrs.push(Instr::Jge("index_out_of_bound".to_string()));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si + 2) * 8)));
+            instrs.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(8)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(8)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si * 8)));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RAX, 0)));
+        }
     }
     instrs
 }
@@ -731,6 +812,12 @@ fn instr_to_str(i: &Instr) -> String {
             let str = format!("xor {}, {}\n", s_val1, s_val2);
             return str;
         }
+        Instr::And(val1, val2) => {
+            let s_val1 = val_to_str(val1);
+            let s_val2 = val_to_str(val2);
+            let str = format!("and {}, {}\n", s_val1, s_val2);
+            return str;
+        }
         Instr::Ret => {
             let str = format!("ret\n");
             return str;
@@ -749,6 +836,7 @@ fn val_to_str(v: &Val) -> String {
             Reg::RBX => return format!("rbx"),
             Reg::RSP => return format!("rsp"),
             Reg::RDI => return format!("rdi"),
+            Reg::R15 => return format!("r15"),
         },
         Val::Imm(n) => return format!("{}", n),
         Val::RegOffset(reg, offset) => match reg {
@@ -762,7 +850,10 @@ fn val_to_str(v: &Val) -> String {
                 return format!("[rsp - {}]", offset);
             }
             Reg::RDI => {
-                return format!("[rdi = {}]", offset);
+                return format!("[rdi - {}]", offset);
+            }
+            Reg::R15 => {
+                return format!("[r15 - {}]", offset);
             }
         },
         Val::Bool(flag) => match flag {

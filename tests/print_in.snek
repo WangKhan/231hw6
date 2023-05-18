@@ -1,2 +1,0 @@
-(fun (display n) (if (= n 1) 1 (block (print n) (display (- n 1)))))
-(display 100)

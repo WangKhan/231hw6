@@ -1,2 +1,0 @@
-(fun (fac n) (+ input n))
-(fac 3)

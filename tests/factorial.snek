@@ -1,2 +1,0 @@
-(fun (fac n) (if (< n 1) 1 (print (* n (fac (- n 1))))))
-(fac 20)

@@ -1,2 +1,0 @@
-(fun (adder n) (add1 n))
-(adder 3)

@@ -1,2 +1,0 @@
-(fun (add n) (add1 n))
-(fun (add n) (sub1 n))

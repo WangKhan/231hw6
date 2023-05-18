@@ -1,3 +1,0 @@
-(fun (add a b) (sub a b))
-(fun (sub a b) (- a b))
-(add 1 2)

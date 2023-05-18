@@ -23,9 +23,21 @@
           ret
         
         our_code_starts_here:
-        mov rax, 7
-test rax, 3
-mov rax, 7
-mov rbx, 3
+          mov r15,rsi
+          mov [r15 - 0], rax
+mov rax, 2
+mov [r15 - 8], rax
+mov rax, 4
+mov [r15 - 16], rax
+mov rax, 6
+mov [r15 - 24], rax
+mov rax, r15
+add rax, 1
+add r15, 32
+and rax, 3
+cmp rax, 3
+mov rax, 3
+mov rbx, 7
 cmove rax, rbx
-        ret
+          ret
+
