@@ -26,15 +26,56 @@ pub extern "C" fn snek_error(errcode: i64) {
     std::process::exit(1);
 }
 
-#[export_name = "\x01snek_print"]
-pub extern "C" fn snek_print(val : i64) -> i64 {
+#[export_name = "\x01snek_println"]
+pub extern "C" fn snek_println(val : i64) -> i64 {
     if val == 7 { println!("true"); }
     else if val == 3 { println!("false"); }
     else if val % 2 == 0 { println!("{}", val >> 1); }
     else {
-        println!("tuple, starting address: {}", val-1);
+        print!("( ");
+        let addr: *const i64 = (val - 1) as *const i64;
+        let mut length;
+        unsafe {
+            length = *(addr);
+        }
+        length /= 2;
+        for num in 1..= length {
+            let value;
+            let value_addr: *const i64 = (val - 1 + num * 8) as *const i64;
+            unsafe {
+                value = *(value_addr);
+            };
+            snek_print(value);
+            print!(" ");
+        }
+        print!(")\n");
     }
     return val;
+}
+
+fn snek_print(val: i64) {
+    if val == 7 { print!("true"); }
+    else if val == 3 { print!("false"); }
+    else if val % 2 == 0 { print!("{}", val >> 1); }
+    else {
+        print!("( ");
+        let addr: *const i64 = (val - 1) as *const i64;
+        let mut length;
+        unsafe {
+            length = *(addr);
+        }
+        length /= 2;
+        for num in 1..= length {
+            let value;
+            let value_addr: *const i64 = (val - 1 + num * 8) as *const i64;
+            unsafe {
+                value = *(value_addr);
+            };
+            snek_print(value);
+            print!(" ");
+        }
+        print!(")");
+    }
 }
 
 fn parse_input(input: &str) -> i64 {
@@ -57,7 +98,6 @@ fn main() {
     let total_size: usize = 1024 * 8; // 1024 * 8 byte
     let mut data= Vec::with_capacity(total_size);
     let starting_addr : *mut u8 = data.as_mut_ptr();
-    println!("{:?}", starting_addr);
     let output: i64 = unsafe { our_code_starts_here(input, starting_addr) };
-    snek_print(output);
+    snek_println(output);
 }

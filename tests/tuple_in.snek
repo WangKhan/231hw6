@@ -1,0 +1,1 @@
+(let ((x (tuple 1 (tuple 4 3)))) (index x 1))

@@ -1,0 +1,2 @@
+(fun (fac n) (if (< n 1) 1 (print (* n (fac (- n 1))))))
+(let ((x (tuple (+ 1 2) (- 6 5) (fac 3)))) (index x 0))

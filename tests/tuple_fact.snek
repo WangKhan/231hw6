@@ -1,0 +1,2 @@
+(fun (fac n) (if (< n 1) 1 (print (* n (fac (- n 1))))))
+(tuple (fac 3) (fac 4) (fac 5))

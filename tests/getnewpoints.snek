@@ -1,0 +1,4 @@
+(fun (getpoint x y) (tuple x y))
+(fun (getnewpoint x y) (tuple (+ (index x 0) (index y 0))  (+ (index x 1) (index y 1))))
+
+(getnewpoint (getpoint 1 2) (getpoint 3 4))

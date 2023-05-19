@@ -137,7 +137,7 @@ fn main() -> std::io::Result<()> {
         section .text
         global our_code_starts_here
         extern snek_error
-        extern snek_print
+        extern snek_println
         error_handling_starts_here:
         index_out_of_bound:
           mov rdi, 102
@@ -159,7 +159,7 @@ fn main() -> std::io::Result<()> {
         print:
           mov rdi, [rsp + 8]
           push rsp
-          call snek_print
+          call snek_println
           pop rsp
           ret
         {}
@@ -614,7 +614,6 @@ fn compile_to_instrs(
             Val::Reg(Reg::RAX)));
             param_offset += 8;
           }
-          println!("{}, {}", stack_offset + param_offset - 8 + align_offset, align_offset );
           instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(stack_offset + param_offset - 8 + align_offset)));
           instrs.push(Instr::Call(func_name.to_string()));
           instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(stack_offset + param_offset - 8 + align_offset)));
@@ -622,29 +621,36 @@ fn compile_to_instrs(
         }
         Expr::Tuple(es) => {
             if es.len() == 0 {
-                panic!("Invalid");
+                panic!("Invalid, empty tuple");
             }
             let i64_value: i64 = es.len().try_into().unwrap();
+            instrs.push(Instr::IMov(Val::Reg(Reg::RBX),
+            Val::Imm(i64_value * 2)));
             instrs.push(Instr::IMov(Val::RegOffset(Reg::R15, 0),
-            Val::Imm(i64_value)));
-            let mut offset = 8;
+            Val::Reg(Reg::RBX)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, si * 8),
+            Val::Reg(Reg::R15)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm((i64_value + 1) * 8)));
+            let mut offset = -8;
+            // as heap is growing up, and the regoffset will minus the offset, so set the offset to negative value
             for block in es {
+                
                 instrs.append(&mut compile_to_instrs(
                     block,
-                    si,
+                    si + 1,
                     env,
                     brake,
                     l,
                     func_map.clone(),
                 ));
-                instrs.push(Instr::IMov(Val::RegOffset(Reg::R15, offset),
+                instrs.push(Instr::IMov(Val::Reg(Reg::RBX),
+                Val::RegOffset(Reg::RSP, si * 8)));
+                instrs.push(Instr::IMov(Val::RegOffset(Reg::RBX, offset),
                 Val::Reg(Reg::RAX)));
-                offset += 8;
+                offset -= 8;
             }
-            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R15)));
-            // tag the heap address with 01 ending
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si * 8)));
             instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
-            instrs.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm(offset)));
         }
         Expr::Index(pointer, index ) => {
             instrs.append(&mut compile_to_instrs(
@@ -660,6 +666,9 @@ fn compile_to_instrs(
             instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::Imm(1)));
             instrs.push(Instr::Jne("not_tuple".to_string()));
             instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si * 8)));
+            // unmarshal the pointer to a real address
+            instrs.push(Instr::ISub(Val::Reg(Reg::RBX), Val::Imm(1)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, si * 8), Val::Reg(Reg::RBX)));
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
             instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 1) * 8), Val::Reg(Reg::RAX)));
             instrs.append(&mut compile_to_instrs(
@@ -675,7 +684,7 @@ fn compile_to_instrs(
             // index starts from 0
             instrs.push(Instr::Jge("index_out_of_bound".to_string()));
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si + 2) * 8)));
-            instrs.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(8)));
+            instrs.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(4)));
             instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(8)));
             instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si * 8)));
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RAX, 0)));
