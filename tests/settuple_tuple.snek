@@ -1,0 +1,1 @@
+(let ((x (tuple 1 2))) (block (settuple x 0 (tuple 3 4 5 6))))

@@ -1,0 +1,32 @@
+(fun (contains tree target) (
+  let ((val (index tree 0)) (left (index tree 1)) (right (index tree 2)))
+  (
+    block
+    (
+      if (= target val) true (
+        if (< target val) (
+          if (= left nil) false (contains left target)
+        ) (
+          if (= right nil) false (contains right target)
+        )
+      )
+    )
+  )
+  )
+)
+
+(fun (addElement tree target) (
+  if (= tree nil) (tuple target nil nil) (
+  let ((val (index tree 0)) (left (index tree 1)) (right (index tree 2))) (
+      if (= val target) tree (
+        if (< target val) (
+          if (= left nil) (settuple tree 1 (tuple target nil nil)) (block (addElement left target) tree)
+        ) (
+          if (= right nil) (settuple tree 2 (tuple target nil nil)) (block (addElement right target) tree)
+        )
+      )
+  )
+  )
+))
+
+(addElement nil 1)

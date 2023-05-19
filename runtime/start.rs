@@ -31,6 +31,7 @@ pub extern "C" fn snek_println(val : i64) -> i64 {
     if val == 7 { println!("true"); }
     else if val == 3 { println!("false"); }
     else if val % 2 == 0 { println!("{}", val >> 1); }
+    else if val == 1 { println!("nil"); }
     else {
         print!("( ");
         let addr: *const i64 = (val - 1) as *const i64;
@@ -57,6 +58,7 @@ fn snek_print(val: i64) {
     if val == 7 { print!("true"); }
     else if val == 3 { print!("false"); }
     else if val % 2 == 0 { print!("{}", val >> 1); }
+    else if val == 1 {print!("nil");}
     else {
         print!("( ");
         let addr: *const i64 = (val - 1) as *const i64;
@@ -95,7 +97,7 @@ fn main() {
     let input = if args.len() == 2 { &args[1] } else { "false" };
     let input = parse_input(&input);
     // Allocate a large memory space
-    let total_size: usize = 1024 * 8; // 1024 * 8 byte
+    let total_size: usize = 1024 * 8 ; // 1024 * 8 byte
     let mut data= Vec::with_capacity(total_size);
     let starting_addr : *mut u8 = data.as_mut_ptr();
     let output: i64 = unsafe { our_code_starts_here(input, starting_addr) };

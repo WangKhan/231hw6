@@ -14,6 +14,7 @@ enum Val {
     Imm(i64),
     RegOffset(Reg, i64),
     Bool(bool),
+    Nil
 }
 
 #[derive(Debug)]
@@ -90,7 +91,9 @@ enum Expr {
     Break(Box<Expr>),
     Call(String, Vec<Expr>),
     Tuple(Vec<Expr>),
-    Index(Box<Expr>, Box<Expr>)
+    Index(Box<Expr>, Box<Expr>),
+    SetTuple(Box<Expr>, Box<Expr>, Box<Expr>),
+    Nil
 }
 #[derive(Debug)]
 enum Def {
@@ -183,6 +186,7 @@ fn parse_expr(s: &Sexp) -> Expr {
         Sexp::Atom(I(n)) => Expr::Number(i64::try_from(*n).unwrap()),
         Sexp::Atom(S(name)) if name == "true" => Expr::Boolean(true),
         Sexp::Atom(S(name)) if name == "false" => Expr::Boolean(false),
+        Sexp::Atom(S(name)) if name == "nil" => Expr::Nil,
         Sexp::Atom(S(id)) => Expr::Id(id.to_string()),
         Sexp::List(vec) => match &vec[..] {
             [Sexp::Atom(S(op)), e] if op == "add1" => {
@@ -252,6 +256,11 @@ fn parse_expr(s: &Sexp) -> Expr {
                 Box::new(parse_expr(e1)),
                 Box::new(parse_expr(e2)),
             ),
+            [Sexp::Atom(S(op)), e1, e2, e3] if op == "settuple" => Expr::SetTuple(
+                Box::new(parse_expr(e1)),
+                Box::new(parse_expr(e2)),
+                Box::new(parse_expr(e3)),
+            ),
             [Sexp::Atom(S(op)), name, e] if op == "set!" => {
                 Expr::Set(name.to_string(), Box::new(parse_expr(e)))
             }
@@ -320,6 +329,9 @@ fn compile_to_instrs(
         }
         Expr::Boolean(false) => {
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Bool(false)));
+        }
+        Expr::Nil => {
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Nil));
         }
         Expr::Id(s) => {
             match s.as_str() {
@@ -443,7 +455,7 @@ fn compile_to_instrs(
                 instrs.push(Instr::Jne("invalid_argument".to_string()));
                 instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
                 instrs.push(Instr::Test(Val::Reg(Reg::RBX), Val::Imm(1)));
-                instrs.push(Instr::Jne(end_label.clone()));
+                instrs.push(Instr::Je(end_label.clone()));
                 instrs.push(Instr::Xor(
                     Val::Reg(Reg::RBX),
                     Val::RegOffset(Reg::RSP, stack_offset),
@@ -689,6 +701,55 @@ fn compile_to_instrs(
             instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si * 8)));
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RAX, 0)));
         }
+        Expr::SetTuple(pointer, index, val ) => {
+            instrs.append(&mut compile_to_instrs(
+                pointer,
+                si,
+                env,
+                brake,
+                l,
+                func_map.clone(),
+            ));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, si * 8), Val::Reg(Reg::RAX)));
+            instrs.push(Instr::And(Val::Reg(Reg::RAX), Val::Imm(3)));
+            instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::Jne("not_tuple".to_string()));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si * 8)));
+            // unmarshal the pointer to a real address
+            instrs.push(Instr::ISub(Val::Reg(Reg::RBX), Val::Imm(1)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, si * 8), Val::Reg(Reg::RBX)));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 1) * 8), Val::Reg(Reg::RAX)));
+            instrs.append(&mut compile_to_instrs(
+                index,
+                si + 2,
+                env,
+                brake,
+                l,
+                func_map.clone(),
+            ));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 2) * 8), Val::Reg(Reg::RAX)));
+            instrs.push(Instr::Cmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si + 1) * 8)));
+            // index starts from 0
+            instrs.push(Instr::Jge("index_out_of_bound".to_string()));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si + 2) * 8)));
+            instrs.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(4)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(8)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si * 8)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si + 2) * 8), Val::Reg(Reg::RAX)));
+            instrs.append(&mut compile_to_instrs(
+                val,
+                si + 3,
+                env,
+                brake,
+                l,
+                func_map.clone(),
+            ));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, (si + 2) * 8)));
+            instrs.push(Instr::IMov(Val::RegOffset(Reg::RBX, 0), Val::Reg(Reg::RAX)));
+            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si) * 8)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+        }
     }
     instrs
 }
@@ -872,6 +933,9 @@ fn val_to_str(v: &Val) -> String {
             false => {
                 return format!("{}", 3)
             }
+        }
+        Val::Nil => {
+            return format!("{}", 1) 
         }
     }
 }
