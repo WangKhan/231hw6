@@ -1,0 +1,1 @@
+(let ((a (tuple 1 2 3)) (b (tuple 4 5 a))) (block (settuple a 0 b) (print a)))

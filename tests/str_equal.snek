@@ -1,0 +1,1 @@
+(let ((a (tuple 1 2 3)) (b (tuple 4 5 a)) (c (tuple 1 2 3)) (d (tuple 4 5 c))) (block (settuple a 0 b) (settuple c 0 d)(equal a c)))

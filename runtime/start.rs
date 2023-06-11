@@ -26,57 +26,59 @@ pub extern "C" fn snek_error(errcode: i64) {
     std::process::exit(1);
 }
 
-#[export_name = "\x01snek_println"]
-pub extern "C" fn snek_println(val : i64) -> i64 {
-    if val == 7 { println!("true"); }
-    else if val == 3 { println!("false"); }
-    else if val % 2 == 0 { println!("{}", val >> 1); }
-    else if val == 1 { println!("nil"); }
-    else {
-        print!("( ");
-        let addr: *const i64 = (val - 1) as *const i64;
-        let mut length;
-        unsafe {
-            length = *(addr);
-        }
-        length /= 2;
-        for num in 1..= length {
-            let value;
-            let value_addr: *const i64 = (val - 1 + num * 8) as *const i64;
-            unsafe {
-                value = *(value_addr);
-            };
-            snek_print(value);
-            print!(" ");
-        }
-        print!(")\n");
+#[export_name = "\x01snek_equal"]
+fn snek_equal(val1 : i64, val2: i64) -> i64 {
+    let mut seen1 = Vec::<i64>::new();
+    let mut seen2 = Vec::<i64>::new();
+    let str1 = snek_str(val1, &mut seen1);
+    let str2 = snek_str(val2, &mut seen1);
+    if (str1 == str2) {
+        return 7;
+    } else {
+        return 3;
     }
+}
+
+
+
+#[export_name = "\x01snek_print"]
+fn snek_print(val : i64) -> i64 {
+    let mut seen = Vec::<i64>::new();
+    println!("{}", snek_str(val, &mut seen));
     return val;
 }
 
-fn snek_print(val: i64) {
-    if val == 7 { print!("true"); }
-    else if val == 3 { print!("false"); }
-    else if val % 2 == 0 { print!("{}", val >> 1); }
-    else if val == 1 {print!("nil");}
+
+fn snek_str(val: i64, seen : &mut Vec<i64>) -> String{
+    if val == 7 { "true".to_string() }
+    else if val == 3 { "false".to_string()  }
+    else if val % 2 == 0 { format!("{}", val >> 1) }
+    else if val == 1 { "nil".to_string() }
     else {
-        print!("( ");
+        if seen.contains(&val)  { return "(tuple <cyclic>)".to_string()}
+        seen.push(val);
         let addr: *const i64 = (val - 1) as *const i64;
         let mut length;
         unsafe {
             length = *(addr);
         }
         length /= 2;
+        let mut res = String::new();
+        res.push('(');
+        let mut res = '('.to_string();
         for num in 1..= length {
             let value;
             let value_addr: *const i64 = (val - 1 + num * 8) as *const i64;
             unsafe {
                 value = *(value_addr);
             };
-            snek_print(value);
-            print!(" ");
+            res.push_str(&snek_str(value, seen));
+            res.push(',');
         }
-        print!(")");
+        res.pop();
+        res.push(')');
+        seen.pop();
+        return res;
     }
 }
 
@@ -101,5 +103,6 @@ fn main() {
     let mut data= Vec::with_capacity(total_size);
     let starting_addr : *mut u8 = data.as_mut_ptr();
     let output: i64 = unsafe { our_code_starts_here(input, starting_addr) };
-    snek_println(output);
+    let mut seen = Vec::<i64>::new();
+    snek_print(output);
 }

@@ -28,7 +28,7 @@ enum Reg {
 
 const KEY_WORDS: [&'static str; 20] = [
     "let", "add1", "sub1", "block", "true", "false", "if", "break", "set!", "+", "-", "*", "<",
-    ">", "<=", ">=", "=", "isnum", "isbool", "input",
+    ">", "<=", ">=", "=", "isnum", "isbool", "input", 
 ];
 
 #[derive(Debug)]
@@ -140,7 +140,8 @@ fn main() -> std::io::Result<()> {
         section .text
         global our_code_starts_here
         extern snek_error
-        extern snek_println
+        extern snek_print
+        extern snek_equal
         error_handling_starts_here:
         index_out_of_bound:
           mov rdi, 102
@@ -162,8 +163,13 @@ fn main() -> std::io::Result<()> {
         print:
           mov rdi, [rsp + 8]
           push rsp
-          call snek_println
+          call snek_print
           pop rsp
+          ret
+        equal:
+          mov rdi, [rsp + 8]
+          mov rsi, [rsp + 16]
+          call snek_equal
           ret
         {}
         our_code_starts_here:
@@ -958,6 +964,7 @@ fn compile_func(parsed: Vec<Lang>, label: &mut i32) -> (String, HashMap<String, 
     let mut instrs: Vec<Instr> = Vec::new();
     let mut func_map: HashMap<String, i64> = HashMap::new();
     func_map = func_map.update("print".to_string(), 1);
+    func_map = func_map.update("equal".to_string(), 2);
     for piece in &parsed {
       match piece {
         Lang::Def(Def::Func(fun, params, expr)) => {
